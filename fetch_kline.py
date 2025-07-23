@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import logging
 import random
 import sys
@@ -15,8 +16,28 @@ import os
 import pandas as pd
 import tushare as ts
 from tqdm import tqdm
+import threading
 
 warnings.filterwarnings("ignore")
+
+
+# --- Rate Limiting ---
+# Tushare allows 500 calls per minute. We aim for 480 to be safe (8 calls/sec).
+# Interval between calls = 1 / 8 = 0.125s. Add a buffer.
+CALL_INTERVAL = 0.13
+last_call_time = time.monotonic()
+tushare_lock = threading.Lock()
+
+def tushare_throttle():
+    """全局节流阀，确保 Tushare API 调用不会过于频繁"""
+    global last_call_time
+    with tushare_lock:
+        now = time.monotonic()
+        elapsed = now - last_call_time
+        if elapsed < CALL_INTERVAL:
+            time.sleep(CALL_INTERVAL - elapsed)
+        last_call_time = time.monotonic()
+
 
 # --------------------------- 全局日志配置 --------------------------- #
 LOG_FILE = Path("fetch.log")
@@ -60,7 +81,7 @@ def set_api(session) -> None:
     """由外部(比如GUI)注入已创建好的 ts.pro_api() 会话"""
     global pro
     pro = session
-    
+
 
 def _to_ts_code(code: str) -> str:
     """把6位code映射到标准 ts_code 后缀。"""
@@ -132,7 +153,7 @@ def _filter_by_boards_stocklist(df: pd.DataFrame, exclude_boards: set[str]) -> p
     return df[mask].copy()
 
 def load_codes_from_stocklist(stocklist_csv: Path, exclude_boards: set[str]) -> List[str]:
-    df = pd.read_csv(stocklist_csv)    
+    df = pd.read_csv(stocklist_csv)
     df = _filter_by_boards_stocklist(df, exclude_boards)
     codes = df["symbol"].astype(str).str.zfill(6).tolist()
     codes = list(dict.fromkeys(codes))  # 去重保持顺序
