@@ -17,8 +17,28 @@ import pandas as pd
 import tushare as ts
 from mootdx.quotes import Quotes
 from tqdm import tqdm
+import threading
 
 warnings.filterwarnings("ignore")
+
+
+# --- Rate Limiting ---
+# Tushare allows 500 calls per minute. We aim for 480 to be safe (8 calls/sec).
+# Interval between calls = 1 / 8 = 0.125s. Add a buffer.
+CALL_INTERVAL = 0.13
+last_call_time = time.monotonic()
+tushare_lock = threading.Lock()
+
+def tushare_throttle():
+    """全局节流阀，确保 Tushare API 调用不会过于频繁"""
+    global last_call_time
+    with tushare_lock:
+        now = time.monotonic()
+        elapsed = now - last_call_time
+        if elapsed < CALL_INTERVAL:
+            time.sleep(CALL_INTERVAL - elapsed)
+        last_call_time = time.monotonic()
+
 
 # --------------------------- 全局日志配置 --------------------------- #
 LOG_FILE = Path("fetch.log")
@@ -115,6 +135,7 @@ def _to_ts_code(code: str) -> str:
 
 
 def _get_kline_tushare(code: str, start: str, end: str, adjust: str) -> pd.DataFrame:
+    tushare_throttle()  # Apply rate limiting before each call
     ts_code = _to_ts_code(code)
     adj_flag = None if adjust == "" else adjust
     for attempt in range(1, 4):
