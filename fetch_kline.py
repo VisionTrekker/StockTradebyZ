@@ -5,6 +5,7 @@ import datetime as dt
 import json
 import logging
 import random
+import os
 import sys
 import time
 import warnings
@@ -17,10 +18,13 @@ import pandas as pd
 import tushare as ts
 from mootdx.quotes import Quotes
 from tqdm import tqdm
+from dotenv import load_dotenv
 import threading
 
 warnings.filterwarnings("ignore")
 
+# 加载.env文件
+load_dotenv()
 
 # --- Rate Limiting ---
 # Tushare allows 500 calls per minute. We aim for 480 to be safe (8 calls/sec).
@@ -324,7 +328,10 @@ def main():
 
     # ---------- Token 处理 ---------- #
     if args.datasource == "tushare":
-        ts_token = " "  # 在这里补充token
+        ts_token = os.getenv("TUSHARE_TOKEN")
+        if not ts_token:
+            logger.error("未找到TUSHARE_TOKEN环境变量，请在.env文件中设置")
+            sys.exit(1)
         ts.set_token(ts_token)
         global pro
         pro = ts.pro_api()
