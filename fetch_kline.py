@@ -16,10 +16,13 @@ import os
 import pandas as pd
 import tushare as ts
 from tqdm import tqdm
+from dotenv import load_dotenv
 import threading
 
 warnings.filterwarnings("ignore")
 
+# 加载.env文件
+load_dotenv()
 
 # --- Rate Limiting ---
 # Tushare allows 500 calls per minute. We aim for 480 to be safe (8 calls/sec).
@@ -210,12 +213,13 @@ def main():
     parser.add_argument("--workers", type=int, default=6, help="并发线程数")
     args = parser.parse_args()
 
-    # ---------- Tushare Token ---------- #
+    # ---------- Token 处理 ---------- #
     os.environ["NO_PROXY"] = "api.waditu.com,.waditu.com,waditu.com"
     os.environ["no_proxy"] = os.environ["NO_PROXY"]
-    ts_token = os.environ.get("TUSHARE_TOKEN")
+    ts_token = os.getenv("TUSHARE_TOKEN")
     if not ts_token:
-        raise ValueError("请先设置环境变量 TUSHARE_TOKEN，例如：export TUSHARE_TOKEN=你的token")
+        logger.error("未找到TUSHARE_TOKEN环境变量，请在.env文件中设置")
+        sys.exit(1)
     ts.set_token(ts_token)
     global pro
     pro = ts.pro_api()
