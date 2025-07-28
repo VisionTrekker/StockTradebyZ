@@ -273,7 +273,7 @@ class BBIKDJSelector:
     def _passes_filters(self, hist: pd.DataFrame) -> bool:
         hist = hist.copy()
         hist["BBI"] = compute_bbi(hist)
-        
+
         if not passes_day_constraints_today(hist):
             return False
 
@@ -305,7 +305,7 @@ class BBIKDJSelector:
         if not (j_today < self.j_threshold or j_today <= j_quantile):
             
             return False
-        
+
         # —— 2.5 60日均线条件（使用通用函数）
         hist["MA60"] = hist["close"].rolling(window=60, min_periods=1).mean()
 
@@ -316,13 +316,13 @@ class BBIKDJSelector:
         # 寻找最近一次“有效上穿 MA60”的 T（使用 max_window 作为回看长度，避免过旧）
         t_pos = last_valid_ma_cross_up(hist["close"], hist["MA60"], lookback_n=self.max_window)
         if t_pos is None:
-            return False        
+            return False
 
         # 3. MACD：DIF > 0
         hist["DIF"] = compute_dif(hist)
         if hist["DIF"].iloc[-1] <= 0:
             return False
-       
+
         # 4. 当日：收盘>长期线 且 短期线>长期线
         if not zx_condition_at_positions(hist, require_close_gt_long=True, require_short_gt_long=True, pos=None):
             return False
@@ -494,7 +494,7 @@ class PeakKDJSelector:
     def _passes_filters(self, hist: pd.DataFrame) -> bool:
         if hist.empty:
             return False
-        
+
         if not passes_day_constraints_today(hist):
             return False
 
@@ -618,9 +618,9 @@ class BBIShortLongSelector:
     def _passes_filters(self, hist: pd.DataFrame) -> bool:
         hist = hist.copy()
         hist["BBI"] = compute_bbi(hist)
-        
+
         if not passes_day_constraints_today(hist):
-            return False      
+            return False
 
         # 1. BBI 上升（允许部分回撤）
         if not bbi_deriv_uptrend(
@@ -656,7 +656,7 @@ class BBIShortLongSelector:
                 if i + 1 < len(short_series) and mask_lower.iloc[i + 1 :].any():
                     has_upper_then_lower = True
                     break
-        
+
         end_ok = short_series.iloc[-1] >= self.upper_rsv_threshold
 
         if not (long_ok and has_upper_then_lower and end_ok):
@@ -695,8 +695,8 @@ class BBIShortLongSelector:
             if self._passes_filters(hist):
                 picks.append(code)
         return picks
-    
-    
+
+
 class MA60CrossVolumeWaveSelector:
     """
     条件：
@@ -714,7 +714,7 @@ class MA60CrossVolumeWaveSelector:
         j_threshold: float = -5.0,
         j_q_threshold: float = 0.10,
         ma60_slope_days: int = 5,
-        max_window: int = 120,   # 用于计算 J 分位        
+        max_window: int = 120,   # 用于计算 J 分位
     ) -> None:
         if lookback_n < 2:
             raise ValueError("lookback_n 应 ≥ 2")
@@ -727,7 +727,7 @@ class MA60CrossVolumeWaveSelector:
         self.j_threshold = j_threshold
         self.j_q_threshold = j_q_threshold
         self.ma60_slope_days = ma60_slope_days
-        self.max_window = max_window        
+        self.max_window = max_window
 
     @staticmethod
     def _ma_slope_positive(series: pd.Series, days: int) -> bool:
@@ -753,7 +753,7 @@ class MA60CrossVolumeWaveSelector:
         min_len = max(60 + self.lookback_n + self.ma60_slope_days, self.max_window + 5)
         if len(hist) < min_len:
             return False
-        
+
         if not passes_day_constraints_today(hist):
             return False
 
@@ -815,7 +815,7 @@ class MA60CrossVolumeWaveSelector:
         # 3) MA60 斜率 > 0（保留原实现）
         if not self._ma_slope_positive(hist["MA60"], self.ma60_slope_days):
             return False
-        
+
         if not zx_condition_at_positions(hist, require_close_gt_long=True, require_short_gt_long=True, pos=None):
             return False
 
