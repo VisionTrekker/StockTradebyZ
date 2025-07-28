@@ -23,7 +23,7 @@
         "price_drop_pct": 0.02,
         "j_threshold": 10,
         "j_q_threshold": 0.10,
-        "B1_params": { 
+        "B1_params": {
           "j_threshold": 10,
           "bbi_min_window": 20,
           "max_window": 60,
