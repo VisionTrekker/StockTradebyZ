@@ -499,7 +499,7 @@ class BBIShortLongSelector:
 
         short_series = win["RSV_short"]
         short_start_end_ok = (
-            short_series.iloc[-2] >= 80 and short_series.iloc[-1] <= 20
+            short_series.iloc[0] >= 80 and short_series.iloc[-1] >= 80
         )
         short_has_below_20 = (short_series < 20).any()
 
