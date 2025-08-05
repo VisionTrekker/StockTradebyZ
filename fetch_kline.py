@@ -90,7 +90,8 @@ def get_constituents(
 
     cond = (df["mktcap"] >= min_cap) & (df["mktcap"] <= max_cap)
     if small_player:
-        cond &= ~df["code"].str.startswith(("300", "301", "688", "8", "4"))
+        # cond &= ~df["code"].str.startswith(("300", "301", "688", "8", "4"))
+        cond &= ~df["code"].str.startswith(("688", "8", "4"))  # 不排除创业板的
 
     codes = df.loc[cond, "code"].str.zfill(6).tolist()
 
@@ -317,7 +318,7 @@ def main():
     parser = argparse.ArgumentParser(description="按市值筛选 A 股并抓取历史 K 线")
     parser.add_argument("--datasource", choices=["tushare", "akshare", "mootdx"], default="tushare", help="历史 K 线数据源")
     parser.add_argument("--frequency", type=int, choices=list(_FREQ_MAP.keys()), default=4, help="K线频率编码，参见说明")
-    parser.add_argument("--exclude-gem", default=True, help="True则排除创业板/科创板/北交所")
+    parser.add_argument("--exclude-gem", action="store_true", default=False, help="True则排除创业板/科创板/北交所")
     parser.add_argument("--min-mktcap", type=float, default=5e9, help="最小总市值（含），单位：元")
     parser.add_argument("--max-mktcap", type=float, default=float("+inf"), help="最大总市值（含），单位：元，默认无限制")
     parser.add_argument("--start", default="20190101", help="起始日期 YYYYMMDD 或 'today'")

@@ -8,7 +8,7 @@ set -x  # 开启调试模式，打印接下来要执行的命令
 python fetch_kline.py \
     --datasource tushare \
     --frequency 4 \
-    --exclude-gem False \
+    --exclude-gem \
     --min-mktcap 5e9 \
     --max-mktcap +inf \
     --start 20220101 \
