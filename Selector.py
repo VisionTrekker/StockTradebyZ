@@ -162,22 +162,22 @@ class BBIKDJSelector:
         bbi_q_threshold: float = 0.05,
         j_q_threshold: float = 0.10,
     ) -> None:
-        self.j_threshold = j_threshold
-        self.bbi_min_window = bbi_min_window
-        self.max_window = max_window
-        self.price_range_pct = price_range_pct
-        self.bbi_q_threshold = bbi_q_threshold  # ← 原 q_threshold
-        self.j_q_threshold = j_q_threshold      # ← 新增
+        self.j_threshold = j_threshold          # J 值进入超卖区的绝对阈值 (10)
+        self.bbi_min_window = bbi_min_window    # BBI 趋势判断的最小窗口 (20天)
+        self.max_window = max_window            # 最大回溯窗口 (60天，中期的时间尺度)
+        self.price_range_pct = price_range_pct  # 收盘价波动幅度限制 (100%)
+        self.bbi_q_threshold = bbi_q_threshold  # BBI 趋势回撤容忍度 (30%)
+        self.j_q_threshold = j_q_threshold      # J 值回溯窗口内 历史分位数 (10%)
 
     # ---------- 单支股票过滤 ---------- #
     def _passes_filters(self, hist: pd.DataFrame) -> bool:
-        hist = hist.copy()
-        hist["BBI"] = compute_bbi(hist)
+        hist = hist.copy()  # 历史窗口内的行情数据（开盘、收盘、最高、最低价等）
+        hist["BBI"] = compute_bbi(hist)  # 该窗口内每天的 BBI 值
 
-        # 0. 收盘价波动幅度约束（最近 max_window 根 K 线）
-        win = hist.tail(self.max_window)
+        # 0. 回溯窗口期内 收盘价波动幅度约束（收盘价波动幅度 <= 100%，排除“疯牛”和“死鱼”）
+        win = hist.tail(self.max_window)  # 最近 max_window 天内的行情数据
         high, low = win["close"].max(), win["close"].min()
-        if low <= 0 or (high / low - 1) > self.price_range_pct:           
+        if low <= 0 or (high / low - 1) > self.price_range_pct:
             return False
 
         # 1. BBI 上升（允许部分回撤）
@@ -189,18 +189,17 @@ class BBIKDJSelector:
         ):            
             return False
 
-        # 2. KDJ 过滤 —— 双重条件
-        kdj = compute_kdj(hist)
-        j_today = float(kdj.iloc[-1]["J"])
+        # 2. KDJ 过滤 —— (当日 J 值 <= 10 或 当日 J 值 <= 10% 分位数)
+        kdj = compute_kdj(hist)  # 历史窗口内每日的 KDJ 值
+        j_today = float(kdj.iloc[-1]["J"])  # 当日的 J 值
 
         # 最近 max_window 根 K 线的 J 分位
         j_window = kdj["J"].tail(self.max_window).dropna()
         if j_window.empty:
             return False
-        j_quantile = float(j_window.quantile(self.j_q_threshold))
+        j_quantile = float(j_window.quantile(self.j_q_threshold))  # 最近 max_window 天中，J 值的 j_q_threshold(10%) 分位数（即有10%的 J 值 <= 该数值）
 
         if not (j_today < self.j_threshold or j_today <= j_quantile):
-            
             return False
 
         # 3. MACD：DIF > 0
@@ -266,11 +265,11 @@ class SuperB1Selector:
             raise ValueError("bbi_params没有给出")
 
         # ---------- 基本参数 ----------
-        self.lookback_n = lookback_n
-        self.close_vol_pct = close_vol_pct
-        self.price_drop_pct = price_drop_pct
-        self.j_threshold = j_threshold
-        self.j_q_threshold = j_q_threshold
+        self.lookback_n = lookback_n          # 回溯窗口 (10天)
+        self.close_vol_pct = close_vol_pct    # 盘整期内的 收盘价波动幅度限制 (2%)
+        self.price_drop_pct = price_drop_pct  # 当日收盘价相对前一日下跌的幅度阈值 (2%)
+        self.j_threshold = j_threshold        # 当日 J 值进入超卖区的绝对阈值 (10)
+        self.j_q_threshold = j_q_threshold    # J 值回溯窗口内 历史分位数 (10%)
 
         # ---------- 内部 BBIKDJSelector ----------
         self.bbi_selector = BBIKDJSelector(**(B1_params or {}))
@@ -288,38 +287,38 @@ class SuperB1Selector:
         if len(hist) < self.lookback_n + self._extra_for_bbi:
             return False
 
-        # ---------- Step-1: 搜索满足 BBIKDJ 的 t_m ----------
-        lb_hist = hist.tail(self.lookback_n + 1)  # +1 以排除自身
+        # ---------- Step-1: 搜索满足 BBIKDJ 的 t_m (前 11 天内找到一个B1日 && 该日到前一日的盘整期>=3天 && 盘整期内的收盘价波动<=2%) ----------
+        lb_hist = hist.tail(self.lookback_n + 1)  # 前 11 天的行情数据
         tm_idx: int | None = None
-        # 遍历回溯窗口
-        for idx in lb_hist.index[:-1]:            
-            if self.bbi_selector._passes_filters(hist.loc[:idx]):
+        # 遍历前 11 天的回溯窗口
+        for idx in lb_hist.index[:-1]:
+            if self.bbi_selector._passes_filters(hist.loc[:idx]):  # 如果该日到 B1
                 tm_idx = idx
-                stable_seg = hist.loc[tm_idx : hist.index[-2], "close"]
+                stable_seg = hist.loc[tm_idx : hist.index[-2], "close"]  # 获取该日 到 前一日（即“盘整期”）的 收盘价
                 if len(stable_seg) < 3:
                     tm_idx = None
                     break
+                # 盘整期需 >= 3天
                 high, low = stable_seg.max(), stable_seg.min()
-                if low <= 0 or (high / low - 1) > self.close_vol_pct:                                      
+                if low <= 0 or (high / low - 1) > self.close_vol_pct:  # 如果盘整期内 收盘价波动 > 2%，则淘汰
                     tm_idx = None
                     continue
                 else:
                     break
         if tm_idx is None:            
-            return False        
-        
+            return False
 
-        # ---------- Step-3: 当日相对前一日跌幅 ----------
+        # ---------- Step-3: 当日收盘价相对于前一日的跌幅 >= 2% (今天在“挖坑”) ----------
         close_today, close_prev = hist["close"].iloc[-1], hist["close"].iloc[-2]
         if close_prev <= 0 or (close_prev - close_today) / close_prev < self.price_drop_pct:            
             return False
 
-        # ---------- Step-4: J 值极低 ----------
+        # ---------- Step-4: 当日 J 值极低 (<= 10 或 <= 10% 分位数) ----------
         kdj = compute_kdj(hist)
         j_today = float(kdj["J"].iloc[-1])
         j_window = kdj["J"].iloc[-self.lookback_n:].dropna()
         j_q_val = float(j_window.quantile(self.j_q_threshold)) if not j_window.empty else np.nan
-        if not (j_today < self.j_threshold or j_today <= j_q_val):            
+        if not (j_today < self.j_threshold or j_today <= j_q_val):
             return False
 
         return True
