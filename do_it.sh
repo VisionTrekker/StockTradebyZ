@@ -38,4 +38,9 @@ python select_stock.py \
     --date "$select_date"
 set +x
 
-echo "✅ 数据拉取和选股操作均成功完成。"
+echo "
+✅ 数据拉取和选股操作均成功完成。"
+echo "-----------------------------------------"
+echo "执行邮件发送任务..."
+python send_email.py
+echo "邮件任务完成。"
