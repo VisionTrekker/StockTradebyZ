@@ -21,7 +21,7 @@ echo "数据拉取成功。准备选股..."
 
 current_hour=$(date +%H)  # 获取当前小时数
 # 根据当前时间确定选股日期
-if [ "$current_hour" -ge 16 ]; then
+if [ "$current_hour" -ge 17 ]; then
     # 晚上 16 点之后，选股日期为下一天
     select_date=$(date -d "tomorrow" +%Y-%m-%d)
 else
