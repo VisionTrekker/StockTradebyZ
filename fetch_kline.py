@@ -163,7 +163,7 @@ def _get_kline_tushare(code: str, start: str, end: str, adjust: str) -> pd.DataF
         return pd.DataFrame()
 
     df = df.rename(columns={"trade_date": "date", "vol": "volume"})[
-        ["date", "open", "close", "high", "low", "volume"]
+        ["date", "open", "close", "high", "low", "volume", "amount"]
     ].copy()
     df["date"] = pd.to_datetime(df["date"])
     df[[c for c in df.columns if c != "date"]] = df[[c for c in df.columns if c != "date"]].apply(
@@ -201,7 +201,7 @@ def _get_kline_akshare(code: str, start: str, end: str, adjust: str) -> pd.DataF
     df[[c for c in df.columns if c != "date"]] = df[[c for c in df.columns if c != "date"]].apply(
         pd.to_numeric, errors="coerce"
     )
-    df = df[["date", "open", "close", "high", "low", "volume"]]
+    df = df[["date", "open", "close", "high", "low", "volume", "amount"]]
     return df.sort_values("date").reset_index(drop=True)
 
 # ---------- Mootdx 工具函数 ---------- #
@@ -226,7 +226,7 @@ def _get_kline_mootdx(code: str, start: str, end: str, adjust: str, freq_code: i
     end_ts = pd.to_datetime(end, format="%Y%m%d")
     df = df[(df["date"].dt.date >= start_ts.date()) & (df["date"].dt.date <= end_ts.date())].copy()    
     df = df.sort_values("date").reset_index(drop=True)    
-    return df[["date", "open", "close", "high", "low", "volume"]]
+    return df[["date", "open", "close", "high", "low", "volume", "amount"]]
 
 # ---------- 通用接口 ---------- #
 
