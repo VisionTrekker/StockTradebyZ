@@ -19,13 +19,24 @@ set +x  # 关闭调试模式
 
 echo "数据拉取成功。准备选股..."
 
+# 根据运行环境（本地或CI）确定时间判断阈值
+if [ -n "$GITHUB_ACTIONS" ]; then
+    # 在 GitHub Actions (UTC) 环境中运行时，阈值为 8 (对应北京时间 16:00)
+    hour_threshold=8
+    echo "Running in GitHub Actions (UTC). Using hour threshold: $hour_threshold"
+else
+    # 在本地 (假定为 UTC+8) 环境中运行时，阈值为 16
+    hour_threshold=16
+    echo "Running locally. Using hour threshold: $hour_threshold"
+fi
+
 current_hour=$(date +%H)  # 获取当前小时数
 # 根据当前时间确定选股日期
-if [ "$current_hour" -ge 17 ]; then
-    # 晚上 16 点之后，选股日期为下一天
+if [ "$current_hour" -ge "$hour_threshold" ]; then
+    # 收盘后，选股日期为下一天
     select_date=$(date -d "tomorrow" +%Y-%m-%d)
 else
-    # 早上，选股日期为当天
+    # 收盘前，选股日期为当天
     select_date=$(date +%Y-%m-%d)
 fi
 
