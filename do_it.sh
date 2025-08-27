@@ -53,5 +53,5 @@ echo "
 ✅ 数据拉取和选股操作均成功完成。"
 echo "-----------------------------------------"
 echo "执行邮件发送任务..."
-python send_email.py
+python send_email.py --date "$select_date"
 echo "邮件任务完成。"
