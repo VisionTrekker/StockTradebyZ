@@ -247,10 +247,14 @@ def zx_condition_at_positions(
 class BBIKDJSelector:
     """
     自适应 *BBI(导数)* + *KDJ* 选股器
-        • BBI: 允许 bbi_q_threshold 比例的回撤
-        • KDJ: J < threshold ；或位于历史 J 的 j_q_threshold 分位及以下
+        • BBI: 允许 50% 比例的回撤
+        • KDJ: J < 13 ；或位于历史 J 的 10% 分位及以下
         • MACD: DIF > 0
         • 收盘价波动幅度 ≤ price_range_pct
+        • 当日K线涨幅在 -2% ~ +2%
+        • 当日K线振幅在 +-7%之间
+        • 白线 在黄线上面
+        • 当日收盘价在黄线上面
     """
 
     def __init__(
@@ -261,24 +265,43 @@ class BBIKDJSelector:
         price_range_pct: float = 100.0,
         bbi_q_threshold: float = 0.05,
         j_q_threshold: float = 0.10,
+        zdf_low: float = -2.0,
+        zdf_high: float = 2.0,
+        zd_main: float = 4.0,
+        zd_gem: float = 7.0,
+        m1: int = 14,
+        m2: int = 28,
+        m3: int = 57,
+        m4: int = 114,
     ) -> None:
-        self.j_threshold = j_threshold          # J 值进入超卖区的绝对阈值 (10)
-        self.bbi_min_window = bbi_min_window    # BBI 趋势判断的最小窗口 (20天)
-        self.max_window = max_window            # 最大回溯窗口 (60天，中期的时间尺度)
-        self.price_range_pct = price_range_pct  # 收盘价波动幅度限制 (100%)
-        self.bbi_q_threshold = bbi_q_threshold  # BBI 趋势回撤容忍度 (30%)
-        self.j_q_threshold = j_q_threshold      # J 值回溯窗口内 历史分位数 (10%)
+        self.j_threshold = j_threshold  # J 值进入超卖区的绝对阈值 (10)
+        self.bbi_min_window = bbi_min_window  # BBI 趋势判断的最小窗口 (20天)
+        self.max_window = max_window  # 最大回溯窗口 (60天，中期的时间尺度)
+        self.price_range_pct = price_range_pct  # 回溯窗口内，收盘价波动幅度限制 (100%)
+        self.bbi_q_threshold = bbi_q_threshold  # BBI 趋势判断内，BBI 趋势回撤容忍度 (50%)
+        self.j_q_threshold = j_q_threshold  # J 值回溯窗口内 历史分位数 (10%)
+        self.zdf_low = zdf_low  # 当日跌幅阈值 (-2%)
+        self.zdf_high = zdf_high  # 当日涨幅阈值 (+2%)
+        self.zd_main = zd_main  # 主板 当日振幅阈值 (4%)
+        self.zd_gem = zd_gem  #  创业板/科创板/北交所 当日振幅阈值 (7%)
+        self.m1 = m1  # 14
+        self.m2 = m2  # 28
+        self.m3 = m3  # 57
+        self.m4 = m4  # 114
 
     # ---------- 单支股票过滤 ---------- #
-    def _passes_filters(self, hist: pd.DataFrame) -> bool:
+    def _passes_filters(self, hist: pd.DataFrame, code: str) -> bool:
+        if len(hist) < 2:
+            return False
+
         hist = hist.copy()  # 历史窗口内的行情数据（开盘、收盘、最高、最低价等）
         hist["BBI"] = compute_bbi(hist)  # 该窗口内每天的 BBI 值
 
         if not passes_day_constraints_today(hist):
             return False
 
-        # 0. 回溯窗口期内 收盘价波动幅度约束（收盘价波动幅度 <= 100%，排除“疯牛”和“死鱼”）
-        win = hist.tail(self.max_window)  # 最近 max_window
+            # 0. 回溯窗口期内 收盘价波动幅度约束（回溯窗口内，收盘价波动幅度 <= 100%，排除“疯牛”和“死鱼”）
+            win = hist.tail(self.max_window)  # 最近 max_window 天内的行情数据
         high, low = win["close"].max(), win["close"].min()
         if low <= 0 or (high / low - 1) > self.price_range_pct:
             return False
@@ -289,19 +312,17 @@ class BBIKDJSelector:
             min_window=self.bbi_min_window,
             max_window=self.max_window,
             q_threshold=self.bbi_q_threshold,
-        ):            
+        ):
             return False
 
-        # 2. KDJ 过滤 —— (当日 J 值 <= 10 或 当日 J 值 <= 10% 分位数)
+        # 2. KDJ 过滤 —— (当日 J 值 <= 13 或 <= 10% 分位数)
         kdj = compute_kdj(hist)  # 历史窗口内每日的 KDJ 值
         j_today = float(kdj.iloc[-1]["J"])  # 当日的 J 值
-
-        # 最近 max_window 根 K 线的 J 分位
+        # 最近 60 天 K 线的 J 分位
         j_window = kdj["J"].tail(self.max_window).dropna()
         if j_window.empty:
             return False
-        j_quantile = float(j_window.quantile(self.j_q_threshold))  # 最近 max_window 天中，J 值的 j_q_threshold(10%) 分位数（即有10%的 J 值 <= 该数值）
-
+        j_quantile = float(j_window.quantile(self.j_q_threshold))  # 最近 60 天中，J 值的 j_q_threshold(10%) 分位数（即有10%的 J 值 <= 该数值）
         if not (j_today < self.j_threshold or j_today <= j_quantile):
             return False
 
@@ -322,7 +343,38 @@ class BBIKDJSelector:
         if hist["DIF"].iloc[-1] <= 0:
             return False
 
-        # 4. 当日：收盘>长期线 且 短期线>长期线
+        # 4. 当日涨跌幅
+        close_today = hist['close'].iloc[-1]
+        close_yesterday = hist['close'].iloc[-2]
+        zdf = (close_today - close_yesterday) / close_yesterday * 100
+        if not (self.zdf_low <= zdf <= self.zdf_high):
+            return False
+
+        # 5. 当日振幅
+        zd = (hist['high'].iloc[-1] - hist['low'].iloc[-1]) / close_yesterday * 100
+        is_main_board = code.startswith('60') or code.startswith('00')
+        is_gem_board = code.startswith('300') or code.startswith('688') or code.startswith('8')
+
+        zd_cond = False
+        if is_main_board and zd <= self.zd_main:
+            zd_cond = True
+        elif is_gem_board and zd <= self.zd_gem:
+            zd_cond = True
+
+        if not zd_cond:
+            return False
+
+        # 6. 知行趋势 & 收盘价 > 黄线
+        st = hist["close"].ewm(span=10, adjust=False).mean().ewm(span=10, adjust=False).mean()
+        ma1 = hist["close"].rolling(self.m1).mean()
+        ma2 = hist["close"].rolling(self.m2).mean()
+        ma3 = hist["close"].rolling(self.m3).mean()
+        ma4 = hist["close"].rolling(self.m4).mean()
+        lt = (ma1 + ma2 + ma3 + ma4) / 4
+
+        if st.iloc[-1] <= lt.iloc[-1] or close_today <= lt.iloc[-1]:
+            return False
+        # 7. 当日：收盘>长期线 且 短期线>长期线
         if not zx_condition_at_positions(hist, require_close_gt_long=True, require_short_gt_long=True, pos=None):
             return False
 
@@ -337,9 +389,10 @@ class BBIKDJSelector:
             hist = df[df["date"] <= date]
             if hist.empty:
                 continue
-            # 额外预留 20 根 K 线缓冲
-            hist = hist.tail(self.max_window + 20)
-            if self._passes_filters(hist):
+            # 额外预留 20 根 K 线缓冲, 增加 M4 的长度
+            required_len = int(max(self.max_window + 20, self.m4 + 1))
+            hist = hist.tail(required_len)
+            if self._passes_filters(hist, code):
                 picks.append(code)
         return picks
     
@@ -372,8 +425,8 @@ class SuperB1Selector:
         j_threshold: float = -5,
         j_q_threshold: float = 0.10,
         # ↓↓↓ 新增：嵌套 BBIKDJSelector 配置
-        B1_params: Optional[Dict[str, Any]] = None        
-    ) -> None:        
+        B1_params: Optional[Dict[str, Any]] = None
+    ) -> None:
         # ---------- 参数合法性检查 ----------
         if lookback_n < 2:
             raise ValueError("lookback_n 应 ≥ 2")
@@ -400,7 +453,8 @@ class SuperB1Selector:
         self._extra_for_bbi = self.bbi_selector.max_window + 20
 
     # 单支股票过滤核心
-    def _passes_filters(self, hist: pd.DataFrame) -> bool:
+    def _passes_filters(self, hist: pd.DataFrame, code: str) -> bool:
+        """*hist* 必须按日期升序，且最后一行为目标 *date*。"""
         if len(hist) < 2:
             return False
 
@@ -417,7 +471,7 @@ class SuperB1Selector:
         tm_idx: int | None = None
         # 遍历前 11 天的回溯窗口
         for idx in lb_hist.index[:-1]:
-            if self.bbi_selector._passes_filters(hist.loc[:idx]):  # 如果该日到 B1
+            if self.bbi_selector._passes_filters(hist.loc[:idx], code):  # 如果该日到 B1
                 tm_idx = idx
                 stable_seg = hist.loc[tm_idx : hist.index[-2], "close"]  # 获取该日 到 前一日（即“盘整期”）的 收盘价
                 if len(stable_seg) < 3:
@@ -458,7 +512,7 @@ class SuperB1Selector:
         return True
 
     # 批量选股接口
-    def select(self, date: pd.Timestamp, data: Dict[str, pd.DataFrame]) -> List[str]:        
+    def select(self, date: pd.Timestamp, data: Dict[str, pd.DataFrame]) -> List[str]:
         picks: List[str] = []
         min_len = self.lookback_n + self._extra_for_bbi
 
@@ -466,7 +520,7 @@ class SuperB1Selector:
             hist = df[df["date"] <= date].tail(min_len)
             if len(hist) < min_len:
                 continue
-            if self._passes_filters(hist):
+            if self._passes_filters(hist, code):
                 picks.append(code)
 
         return picks

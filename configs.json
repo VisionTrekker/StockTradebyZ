@@ -10,7 +10,15 @@
         "max_window": 120,
         "price_range_pct": 1,
         "bbi_q_threshold": 0.2,
-        "j_q_threshold": 0.10
+        "j_q_threshold": 0.10,
+        "zdf_low": -2,
+        "zdf_high": 2,
+        "zd_main": 4,
+        "zd_gem": 7,
+        "m1": 14,
+        "m2": 28,
+        "m3": 57,
+        "m4": 114
       }
     },
     {
@@ -49,9 +57,9 @@
       }
     },
     {
-      "class": "PeakKDJSelector",        
+      "class": "PeakKDJSelector",
       "alias": "填坑战法",
-      "activate": true,                 
+      "activate": true,
       "params": {
         "j_threshold": 13,
         "max_window": 120,
