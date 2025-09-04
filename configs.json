@@ -9,8 +9,16 @@
         "bbi_min_window": 20,
         "max_window": 60,
         "price_range_pct": 1,
-        "bbi_q_threshold": 0.3,
-        "j_q_threshold": 0.10
+        "bbi_q_threshold": 0.5,
+        "j_q_threshold": 0.10,
+        "zdf_low": -2,
+        "zdf_high": 2,
+        "zd_main": 4,
+        "zd_gem": 7,
+        "m1": 14,
+        "m2": 28,
+        "m3": 57,
+        "m4": 114
       }
     },
     {
